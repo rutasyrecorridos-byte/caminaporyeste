@@ -42,6 +42,7 @@ html,body{margin:0;height:100%}
   background:var(--paper);overflow:hidden;
 }
 #app.fs{height:100vh}
+#app.pseudo-fs{position:fixed;inset:0;width:100vw;height:100vh;z-index:99999;background:var(--paper)}
 
 /* ---------- Barra lateral ---------- */
 #side{
@@ -822,11 +823,28 @@ document.getElementById('gpxBtn').onclick=()=>{
 
 /* ---------- Pantalla completa ---------- */
 const appEl=document.getElementById('app');
+const realFsOn=()=>!!(document.fullscreenElement||document.webkitFullscreenElement);
+const realFsSupported=()=>!!(document.fullscreenEnabled||document.webkitFullscreenEnabled)
+                       && !!(appEl.requestFullscreen||appEl.webkitRequestFullscreen);
+let pseudoFs=false;
 document.getElementById('fsBtn').onclick=()=>{
-  if(!document.fullscreenElement){ (appEl.requestFullscreen||appEl.webkitRequestFullscreen).call(appEl); }
-  else{ (document.exitFullscreen||document.webkitExitFullscreen).call(document); }
+  if(realFsSupported()){
+    // PC, Mac y Android: pantalla completa real
+    if(!realFsOn()){ (appEl.requestFullscreen||appEl.webkitRequestFullscreen).call(appEl); }
+    else{ (document.exitFullscreen||document.webkitExitFullscreen).call(document); }
+  } else {
+    // iPhone/iPad (Safari no permite pantalla completa real): modo ampliado.
+    // Avisamos a la página de Blogger para que agrande el iframe a toda la pantalla.
+    pseudoFs=!pseudoFs;
+    appEl.classList.toggle('pseudo-fs', pseudoFs);
+    try{ if(window.parent!==window) window.parent.postMessage(pseudoFs?'cpy-fs-on':'cpy-fs-off','*'); }catch(e){}
+    setTimeout(()=>map.invalidateSize(),250);
+  }
 };
-document.addEventListener('fullscreenchange',()=>{ appEl.classList.toggle('fs',!!document.fullscreenElement); setTimeout(()=>map.invalidateSize(),200); });
+['fullscreenchange','webkitfullscreenchange'].forEach(ev=>
+  document.addEventListener(ev,()=>{ appEl.classList.toggle('fs',realFsOn()); setTimeout(()=>map.invalidateSize(),200); }));
+// Redibuja el mapa cuando cambia el tamaño (giro de móvil o expansión del iframe)
+window.addEventListener('resize',()=>{ clearTimeout(window._riz); window._riz=setTimeout(()=>map.invalidateSize(),150); });
 document.getElementById('allBtn').onclick=()=>{ current=null; ROUTES.forEach(x=>{layers[x.id].line.setStyle({weight:3.2,opacity:0.72});layers[x.id].halo.setStyle({opacity:0});}); wpLayer.clearLayers(); document.getElementById('detail').classList.remove('show'); document.querySelectorAll('.route').forEach(b=>b.classList.remove('on')); fitAll(); };
 
 /* ---------- Selector de mapa de fondo ---------- */
